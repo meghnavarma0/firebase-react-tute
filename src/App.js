@@ -1,14 +1,26 @@
 import React, { Component } from 'react';
-import firebase from './firebase';
+import firebase, { auth, provider } from './firebase';
 import './App.css';
 
 class App extends Component {
+	constructor() {
+		super();
+		/* ... */
+		this.login = this.login.bind(this); // <-- add this line
+		this.logout = this.logout.bind(this); // <-- add this line
+	}
 	state = {
 		currentItem: '',
 		username: '',
-		items: []
+		items: [],
+		user: null
 	};
 	componentDidMount() {
+		auth.onAuthStateChanged(user => {
+			if (user) {
+				this.setState({ user });
+			}
+		});
 		const itemsRef = firebase.database().ref('items');
 		itemsRef.on('value', snapshot => {
 			let items = snapshot.val();
@@ -27,7 +39,7 @@ class App extends Component {
 		});
 	}
 	onRemoveHandler = itemId => {
-		const itemRef = firebase.database().ref(`/items/${itemId}`);
+		const itemRef = firebase.database().ref(`items/${itemId}`);
 		itemRef.remove();
 	};
 	onChangeHandler = e => {
@@ -40,12 +52,25 @@ class App extends Component {
 		const itemsRef = firebase.database().ref('items');
 		const item = {
 			title: this.state.currentItem,
-			user: this.state.username
+			user: this.state.user.displayName || this.state.user.email
 		};
 		itemsRef.push(item);
 		this.setState({
 			currentItem: '',
 			username: ''
+		});
+	};
+	login = () => {
+		auth.signInWithPopup(provider).then(result => {
+			const user = result.user;
+			this.setState({ user });
+		});
+	};
+	logout = () => {
+		auth.signOut().then(() => {
+			this.setState({
+				user: null
+			});
 		});
 	};
 
@@ -55,48 +80,85 @@ class App extends Component {
 				<header>
 					<div className='wrapper'>
 						<h1>Fun Food Friends</h1>
+						{this.state.user ? (
+							<button onClick={this.logout}>Log Out</button>
+						) : (
+							<button onClick={this.login}>Log In</button>
+						)}
 					</div>
 				</header>
-				<div className='container'>
-					<section className='add-item'>
-						<form onSubmit={this.onSubmitHandler}>
-							<input
-								type='text'
-								name='username'
-								placeholder="What's your name?"
-								onChange={this.onChangeHandler}
-								value={this.state.username}
+				{this.state.user ? (
+					<div>
+						<div className='user-profile'>
+							<img
+								src={this.state.user.photoURL}
+								alt='profile pic'
 							/>
-							<input
-								type='text'
-								name='currentItem'
-								placeholder='What are you bringing?'
-								onChange={this.onChangeHandler}
-								value={this.state.currentItem}
-							/>
-							<button>Add Item</button>
-						</form>
-					</section>
-					<section className='display-item'>
-						<div className='wrapper'>
-							<ul>
-								{this.state.items.map(item => (
-									<li key={item.id}>
-										<h3>{item.title}</h3>
-										<p>Brought by: {item.user}</p>
-										<button
-											onClick={() =>
-												this.onRemoveHandler(item.id)
-											}
-										>
-											Remove Item
-										</button>
-									</li>
-								))}
-							</ul>
 						</div>
-					</section>
-				</div>
+						<div className='container'>
+							<section className='add-item'>
+								<form onSubmit={this.onSubmitHandler}>
+									<input
+										type='text'
+										name='username'
+										placeholder="What's your name?"
+										defaultValue={
+											this.state.user.displayName ||
+											this.state.user.email
+										}
+									/>
+									<input
+										type='text'
+										name='currentItem'
+										placeholder='What are you bringing?'
+										onChange={this.onChangeHandler}
+										value={this.state.currentItem}
+									/>
+									<button>Add Item</button>
+								</form>
+							</section>
+							<section className='display-item'>
+								<div className='wrapper'>
+									<ul>
+										{this.state.items.map(item => {
+											return (
+												<li key={item.id}>
+													<h3>{item.title}</h3>
+													<p>
+														brought by: {item.user}
+														{item.user ===
+															this.state.user
+																.displayName ||
+														item.user ===
+															this.state.user
+																.email ? (
+															<button
+																onClick={() =>
+																	this.onRemoveHandler(
+																		item.id
+																	)
+																}
+															>
+																Remove Item
+															</button>
+														) : null}
+													</p>
+												</li>
+											);
+										})}
+									</ul>
+								</div>
+							</section>
+						</div>
+					</div>
+				) : (
+					<div className='wrapper'>
+						<p>
+							You must be logged in to see the potluck list and
+							submit to it.
+						</p>
+					</div>
+				)}
 			</div>
 		);
 	}
